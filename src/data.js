@@ -1,59 +1,101 @@
 import {makeIndex} from "./lib/utils.js";
 
+// Базовый URL API для работы с данными о продажах
 const BASE_URL = 'https://webinars.webdev.education-services.ru/sp7-api';
 
+/**
+ * Инициализация модуля работы с данными
+ * @param {Array} sourceData - Исходные данные для инициализации
+ * @returns {Object} API для работы с данными
+ */
 export function initData(sourceData) {
-    // переменные для кеширования данных
-let sellers;
-let customers;
-let lastResult;
-let lastQuery;
+    // Локальное кэширование данных для оптимизации
+    let sellers;    // Кэш данных о продавцах
+    let customers;  // Кэш данных о покупателях
+    let lastResult; // Кэш последнего результата запроса
+    let lastQuery;  // Кэш последних параметров запроса
 
-// функция для приведения строк в тот вид, который нужен нашей таблице
-const mapRecords = (data) => data.map(item => ({
-    id: item.receipt_id,
-    date: item.date,
-    seller: sellers[item.seller_id],
-    customer: customers[item.customer_id],
-    total: item.total_amount
-}));
+    /**
+     * Преобразует сырые данные API в формат, понятный таблице
+     * @param {Array} data - Массив записей из API
+     * @returns {Array} Нормализованные данные для отображения
+     */
+    const mapRecords = (data) => data.map(item => ({
+        id: item.receipt_id,       // ID чека
+        date: item.date,           // Дата продажи
+        seller: sellers[item.seller_id],   // Имя продавца по ID
+        customer: customers[item.customer_id], // Имя покупателя по ID
+        total: item.total_amount   // Сумма продажи
+    }));
 
-// функция получения индексов
-const getIndexes = async () => {
-    if (!sellers || !customers) { // если индексы ещё не установлены, то делаем запросы
-        [sellers, customers] = await Promise.all([ // запрашиваем и деструктурируем в уже объявленные ранее переменные
-            fetch(`${BASE_URL}/sellers`).then(res => res.json()), // запрашиваем продавцов
-            fetch(`${BASE_URL}/customers`).then(res => res.json()), // запрашиваем покупателей
-        ]);
-    }
-
-    return { sellers, customers };
-}
-
-// функция получения записей о продажах с сервера
-const getRecords = async (query, isUpdated = false) => {
-        const qs = new URLSearchParams(query); // преобразуем объект параметров в SearchParams объект, представляющий query часть url
-        const nextQuery = qs.toString(); // и приводим к строковому виду
-
-        if (lastQuery === nextQuery && !isUpdated) { // isUpdated параметр нужен, чтобы иметь возможность делать запрос без кеша
-            return lastResult; // если параметры запроса не поменялись, то отдаём сохранённые ранее данные
+    /**
+     * Получает и кэширует справочники продавцов и покупателей
+     * @returns {Promise<Object>} Объект с индексами
+     */
+    const getIndexes = async () => {
+        // Загружаем данные только если они еще не загружены
+        if (!sellers || !customers) {
+            // Параллельная загрузка справочников
+            [sellers, customers] = await Promise.all([
+                fetch(`${BASE_URL}/sellers`)
+                    .then(res => res.json())
+                    .then(data => makeIndex(data, 'id')), // Создаем индекс по ID
+                fetch(`${BASE_URL}/customers`)
+                    .then(res => res.json())
+                    .then(data => makeIndex(data, 'id'))
+            ]);
         }
 
-        // если прошлый квери не был ранее установлен или поменялись параметры, то запрашиваем данные с сервера
+        return { 
+            sellers: Object.values(sellers), 
+            customers: Object.values(customers)
+        };
+    }
+
+    /**
+     * Получает записи о продажах с возможностью кэширования
+     * @param {Object} query - Параметры запроса (фильтры, сортировка и т.д.)
+     * @param {Boolean} [isUpdated=false] - Флаг принудительного обновления
+     * @returns {Promise<Object>} Результат с данными и общей суммой
+     */
+    const getRecords = async (query, isUpdated = false) => {
+        // Формируем строку запроса
+        const qs = new URLSearchParams(query);
+        const nextQuery = qs.toString();
+
+        // Используем кэш, если параметры не изменились
+        if (lastQuery === nextQuery && !isUpdated) {
+            return lastResult;
+        }
+
+        // Выполняем новый запрос к API
         const response = await fetch(`${BASE_URL}/records?${nextQuery}`);
+        if (!response.ok) throw new Error('Ошибка загрузки данных');
+        
         const records = await response.json();
 
-        lastQuery = nextQuery; // сохраняем для следующих запросов
+        // Обновляем кэш
+        lastQuery = nextQuery;
         lastResult = {
-            total: records.total,
-            items: mapRecords(records.items)
+            total: records.total,         // Общее количество записей
+            items: mapRecords(records.items) // Преобразованные данные
         };
 
         return lastResult;
     };
 
-return {
-    getIndexes,
-    getRecords
-};
+    // Публичное API модуля
+    return {
+        getIndexes,   // Метод получения справочников
+        getRecords    // Метод получения данных о продажах
+    };
 }
+
+/* 
+ * Особенности реализации:
+ * 1. Используется двойное кэширование - как справочников, так и запросов
+ * 2. Оптимизирована работа с сетью через проверку параметров запроса
+ * 3. Данные нормализуются перед отдачей наружу
+ * 4. Обработка ошибок вынесена на уровень выше
+ * 5. Поддержка принудительного обновления данных
+ */

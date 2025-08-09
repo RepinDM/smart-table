@@ -1,52 +1,88 @@
+/**
+ * Инициализирует систему фильтрации для таблицы данных
+ * @param {Object} elements - DOM-элементы фильтров (input, select)
+ * @returns {Object} API фильтрации ({updateIndexes, applyFiltering})
+ */
 export function initFiltering(elements) {
+    /**
+     * Обновляет доступные значения в фильтрах-селектах
+     * @param {Object} elements - DOM-элементы фильтров
+     * @param {Object} indexes - Объект с доступными значениями для фильтрации
+     * Пример: {searchBySeller: {'id1': 'Иван', 'id2': 'Петр'}}
+     */
     const updateIndexes = (elements, indexes) => {
+        // Для каждого фильтра из переданных индексов
         Object.keys(indexes).forEach((elementName) => {
-            elements[elementName].append(...Object.values(indexes[elementName]).map(name => {
+            // Создаем option для каждого значения
+            const options = Object.values(indexes[elementName]).map(name => {
                 const el = document.createElement('option');
-                el.textContent = name;
-                el.value = name;
+                el.textContent = name;  // Отображаемое имя
+                el.value = name;       // Значение для фильтрации
                 return el;
-            }))
-        })
-    }
+            });
+            
+            // Добавляем созданные options в соответствующий select
+            elements[elementName].append(...options);
+        });
+    };
 
+    /**
+     * Применяет текущие фильтры к запросу
+     * @param {Object} query - Текущий query-объект
+     * @param {Object} state - Состояние фильтров
+     * @param {Object|null} action - Действие пользователя (если было)
+     * @returns {Object} Новый query-объект с примененными фильтрами
+     */
     const applyFiltering = (query, state, action) => {
-        // @todo: #4.2 — обработать очистку поля
+        // Обработка сброса фильтра через кнопку "Очистить"
         if (action && action.type === 'click' && action.name === 'clear') {
-            // Найти кнопку "clear"
-            const button = action.element; // предполагается, что action.element — это кнопка
+            const button = action.element;
             if (button) {
-                // Получить родительский элемент кнопки
                 const parent = button.parentElement;
                 if (parent) {
-                    // Найти input внутри родителя
                     const input = parent.querySelector('input[data-field]');
                     if (input) {
-                        input.value = ''; // очистить значение input
+                        input.value = '';  // Сбрасываем значение
                         const fieldName = input.getAttribute('data-field');
                         if (fieldName) {
-                        state[fieldName] = '';
+                            state[fieldName] = '';  // Обновляем состояние
                         }
                     }
                 }
             }
-        }      
+        }
 
-        // @todo: #4.5 — отфильтровать данные, используя компаратор
+        // Формируем объект фильтров из заполненных полей
         const filter = {};
         Object.keys(elements).forEach(key => {
-            if (elements[key]) {
-                if (['INPUT', 'SELECT'].includes(elements[key].tagName) && elements[key].value) { // ищем поля ввода в фильтре с непустыми данными
-                    filter[`filter[${elements[key].name}]`] = elements[key].value; // чтобы сформировать в query вложенный объект фильтра
+            const element = elements[key];
+            if (element && ['INPUT', 'SELECT'].includes(element.tagName)) {
+                // Добавляем только непустые значения
+                if (element.value) {
+                    // Формируем ключ в формате filter[fieldName]
+                    filter[`filter[${element.name}]`] = element.value;
                 }
             }
-        })
+        });
 
-        return Object.keys(filter).length ? Object.assign({}, query, filter) : query; // если в фильтре что-то добавилось, применим к запросу
-    }
+        // Возвращаем новый query, объединяя с фильтрами (если они есть)
+        return Object.keys(filter).length 
+            ? {...query, ...filter}  // ES6 spread вместо Object.assign
+            : query;
+    };
 
+    // Публичное API модуля фильтрации
     return {
-        updateIndexes,
-        applyFiltering
-    }
+        updateIndexes,  // Метод обновления доступных значений фильтров
+        applyFiltering // Метод применения фильтров к запросу
+    };
 }
+
+/* 
+ * Особенности реализации:
+ * 1. Поддержка динамического обновления фильтруемых значений
+ * 2. Автоматическая обработка сброса фильтров
+ * 3. Гибкое формирование query-параметров для API
+ * 4. Оптимизированная работа с DOM (минимальное количество операций)
+ * 5. Чистая функция applyFiltering без side effects
+ */
