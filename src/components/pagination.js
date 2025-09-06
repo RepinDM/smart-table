@@ -1,107 +1,90 @@
-import {getPages} from "../lib/utils.js";
+import { getPages } from "../lib/utils.js";
 
 /**
  * Инициализирует систему пагинации для таблицы данных
- * @param {Object} elements - DOM-элементы пагинации:
- *   - pages: контейнер для кнопок страниц
- *   - fromRow: элемент для отображения первой строки
- *   - toRow: элемент для отображения последней строки
- *   - totalRows: элемент для отображения общего количества строк
+ * @param {Object} elements - DOM-элементы пагинации
+ * @param {HTMLElement} elements.pages - Контейнер для кнопок страниц
+ * @param {HTMLElement} elements.fromRow - Элемент для отображения первой строки
+ * @param {HTMLElement} elements.toRow - Элемент для отображения последней строки
+ * @param {HTMLElement} elements.totalRows - Элемент для отображения общего количества строк
  * @param {Function} createPage - Функция создания элемента страницы
- * @returns {Object} API пагинации ({updatePagination, applyPagination})
+ * @returns {Object} Объект с методами управления пагинацией
  */
-export const initPagination = ({pages, fromRow, toRow, totalRows}, createPage) => {
-    // Подготовка шаблона кнопки страницы
+export const initPagination = ({ pages, fromRow, toRow, totalRows }, createPage) => {
+    // Подготовка шаблона кнопки страницы из первого элемента контейнера
     const pageTemplate = pages.firstElementChild.cloneNode(true);
-    pages.firstElementChild.remove(); // Удаляем оригинальный шаблон из DOM
+    // Очистка контейнера от исходного шаблона
+    pages.firstElementChild.remove();
 
-    let pageCount; // Общее количество страниц (вычисляется динамически)
+    // Переменная для хранения общего количества страниц
+    let pageCount;
 
     /**
-     * Применяет параметры пагинации к запросу
-     * @param {Object} query - Исходный запрос
-     * @param {Object} state - Текущее состояние
-     * @param {Object|null} action - Действие пользователя (если есть)
-     * @returns {Object} Новый запрос с параметрами пагинации
+     * Применяет параметры пагинации к объекту запроса
+     * @param {Object} query - Исходные параметры запроса
+     * @param {Object} state - Текущее состояние приложения
+     * @param {Object} action - Действие пользователя (опционально)
+     * @returns {Object} Обновленный объект запроса с параметрами пагинации
      */
     const applyPagination = (query, state, action) => {
-        const limit = state.rowsPerPage; // Количество строк на странице
-        let page = state.page;           // Текущая страница
+        const limit = state.rowsPerPage;
+        let page = state.page;
 
-        // Обработка действий навигации
+        // Обработка действий навигации по страницам
         if (action) {
-            switch(action.name) {
-                case 'prev':  // Переход на предыдущую страницу
-                    page = Math.max(1, page - 1);
+            switch (action.name) {
+                case 'prev':
+                    page = Math.max(1, page - 1);  // Переход на предыдущую страницу
                     break;
-                case 'next':  // Переход на следующую страницу
-                    page = Math.min(pageCount, page + 1);
+                case 'next':
+                    page = Math.min(pageCount, page + 1);  // Переход на следующую страницу
                     break;
-                case 'first': // Переход на первую страницу
-                    page = 1;
+                case 'first':
+                    page = 1;  // Переход на первую страницу
                     break;
-                case 'last':  // Переход на последнюю страницу
-                    page = pageCount;
+                case 'last':
+                    page = pageCount;  // Переход на последнюю страницу
                     break;
             }
         }
 
-        // Возвращаем новый запрос с параметрами пагинации
-        return {
-            ...query,
+        // Возвращаем новый объект запроса с обновленными параметрами
+        return Object.assign({}, query, {
             limit,
             page
-        };
+        });
     };
 
     /**
-     * Обновляет отображение пагинации
-     * @param {number} total - Общее количество записей
-     * @param {Object} params - Параметры пагинации:
-     *   - page: текущая страница
-     *   - limit: количество записей на странице
+     * Обновляет визуальное отображение пагинации
+     * @param {number} total - Общее количество элементов
+     * @param {Object} pagination - Параметры пагинации
+     * @param {number} pagination.page - Текущая страница
+     * @param {number} pagination.limit - Количество элементов на странице
      */
     const updatePagination = (total, { page, limit }) => {
         // Вычисляем общее количество страниц
         pageCount = Math.ceil(total / limit);
 
-        // Получаем диапазон видимых страниц (с учетом текущей позиции)
+        // Получаем массив страниц для отображения (максимум 5)
         const visiblePages = getPages(page, pageCount, 5);
-        
-        // Создаем кнопки страниц
-        const pageButtons = visiblePages.map(pageNumber => {
-            const pageElement = pageTemplate.cloneNode(true);
-            return createPage(
-                pageElement, 
-                pageNumber, 
-                pageNumber === page // Флаг активной страницы
-            );
-        });
 
-        // Обновляем DOM
-        pages.replaceChildren(...pageButtons);
+        // Обновляем кнопки страниц в контейнере
+        pages.replaceChildren(...visiblePages.map(pageNumber => {
+            const el = pageTemplate.cloneNode(true);
+            // Используем callback для настройки внешнего вида кнопки
+            return createPage(el, pageNumber, pageNumber === page);
+        }));
 
-        // Обновляем информацию о строках
-        const startRow = (page - 1) * limit + 1;
-        const endRow = Math.min(page * limit, total);
-        
-        fromRow.textContent = startRow;
-        toRow.textContent = endRow;
+        // Обновляем информацию о диапазоне отображаемых строк
+        fromRow.textContent = (page - 1) * limit + 1;
+        toRow.textContent = Math.min((page * limit), total);
         totalRows.textContent = total;
     };
 
-    // Публичное API модуля пагинации
+    // Публичный интерфейс модуля пагинации
     return {
-        updatePagination, // Метод обновления отображения
-        applyPagination   // Метод применения параметров пагинации
+        updatePagination,  // Метод для обновления отображения пагинации
+        applyPagination    // Метод для применения параметров пагинации к запросу
     };
 };
-
-/**
- * Особенности реализации:
- * 1. Динамическое вычисление количества страниц
- * 2. Оптимизированное обновление DOM (минимальные перерисовки)
- * 3. Поддержка различных действий навигации
- * 4. Гибкая система отображения видимых страниц
- * 5. Чистые функции без side effects
- */

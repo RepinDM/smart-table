@@ -1,60 +1,58 @@
-// Импорт вспомогательной функции для работы с сортировкой
-import {sortMap} from "../lib/sort.js";
+import { sortMap } from "../lib/sort.js";
 
 /**
- * Фабрика для создания middleware обработки сортировки табличных данных
- * @param {Array<HTMLElement>} columns - Коллекция DOM-элементов колонок таблицы
- * @returns {Function} Функция-обработчик для модификации query-параметров
+ * Инициализирует систему сортировки для таблицы данных
+ * @param {Array<HTMLElement>} columns - Массив DOM-элементов кнопок сортировки
+ * @returns {Function} Функция для применения параметров сортировки к запросу
  */
 export function initSorting(columns) {
     /**
-     * Обработчик сортировки для Redux middleware
-     * @param {Object} query - Текущие параметры запроса
-     * @param {Object} state - Состояние приложения
-     * @param {Object} action - Объект действия Redux
-     * @returns {Object} Новый объект query с учетом сортировки
+     * Применяет параметры сортировки к объекту запроса
+     * @param {Object} query - Исходные параметры запроса
+     * @param {Object} state - Текущее состояние приложения
+     * @param {Object} action - Действие пользователя (опционально)
+     * @returns {Object} Обновленный объект запроса с параметрами сортировки
      */
     return (query, state, action) => {
-        // Инициализация переменных для хранения параметров сортировки
+        // Переменные для хранения параметров сортировки
         let field = null;
         let order = null;
 
-        // Обработка действия сортировки
+        // Обработка действия сортировки пользователем
         if (action && action.name === 'sort') {
-            // Преобразуем значение сортировки через маппинг
+            // Обновляем состояние кнопки на следующее значение из карты сортировки
             action.dataset.value = sortMap[action.dataset.value];
-            
-            // Получаем параметры сортировки из данных кнопки
+
+            // Извлекаем параметры сортировки из данных кнопки
             field = action.dataset.field;
             order = action.dataset.value;
 
-            // Сброс сортировки в других колонках
+            // Сбрасываем сортировку во всех остальных колонках
             columns.forEach(column => {
-                // Игнорируем активную колонку
+                // Игнорируем активную колонку, с которой работает пользователь
                 if (column.dataset.field !== action.dataset.field) {
-                    // Возвращаем колонку в исходное состояние
-                    column.dataset.value = 'none';
+                    column.dataset.value = 'none';  // Возвращаем в исходное состояние
                 }
             });
         } else {
-            // Восстановление текущей сортировки из DOM
+            // Восстанавливаем текущую сортировку из состояния DOM
             columns.forEach(column => {
                 // Ищем колонку с активной сортировкой
                 if (column.dataset.value !== 'none') {
-                    field = column.dataset.field;
-                    order = column.dataset.value;
+                    field = column.dataset.field;  // Получаем поле сортировки
+                    order = column.dataset.value;  // Получаем направление сортировки
                 }
             });
         }
 
-        // Формируем параметр сортировки для API
-        const sort = (field && order !== 'none') 
-            ? `${field}:${order}`  // Формат: поле:направление
-            : null;  // Нет сортировки
+        // Формируем параметр сортировки в формате "поле:направление"
+        const sort = (field && order !== 'none')
+            ? `${field}:${order}`
+            : null;
 
-        // Возвращаем обновленные параметры запроса
-        return sort 
-            ? Object.assign({}, query, { sort })  // Добавляем сортировку
-            : query;  // Возвращаем исходный query
-    }
+        // Возвращаем обновленный запрос с параметром сортировки или исходный запрос
+        return sort
+            ? Object.assign({}, query, { sort })
+            : query;
+    };
 }

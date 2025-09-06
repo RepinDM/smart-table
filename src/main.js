@@ -1,100 +1,80 @@
-/* === КОНФИГУРАЦИЯ СТИЛЕЙ И ШРИФТОВ === */
-// Подключение фирменного шрифта YS Display
-import './fonts/ys-display/fonts.css';
-// Основные стили интерфейса таблицы
-import './style.css';
+import "./fonts/ys-display/fonts.css";
+import "./style.css";
 
-/* === ИМПОРТ ИСХОДНЫХ ДАННЫХ === */
-import {data as sourceData} from "./data/dataset_1.js";
+import { data as sourceData } from "./data/dataset_1.js";
 
-/* === ИМПОРТ СЕРВИСНЫХ МОДУЛЕЙ === */
-// Модуль управления состоянием данных
-import {initData} from "./data.js";
-// Утилиты для обработки данных форм
-import {processFormData} from "./lib/utils.js";
+import { initData } from "./data.js";
+import { processFormData } from "./lib/utils.js";
 
-/* === ИМПОРТ КОМПОНЕНТОВ ИНТЕРФЕЙСА === */
-import {initTable} from "./components/table.js";
-// Подключение модулей расширенной функциональности:
-import { initPagination } from './components/pagination.js'; // Постраничная навигация
-import { initSorting } from './components/sorting.js';       // Сортировка данных
-import { initFiltering } from './components/filtering.js';    // Фильтрация записей
-import { initSearching } from './components/searching.js';    // Поиск по таблице
+import { initTable } from "./components/table.js";
+import { initPagination } from "./components/pagination.js";
+import { initSorting } from "./components/sorting.js";
+import { initFiltering } from "./components/filtering.js";
+import { initSearching } from "./components/searching.js";
 
-/* === ИНИЦИАЛИЗАЦИЯ ПОИСКА === */
-// Создание обработчика поиска с привязкой к полю 'search'
-const applySearching = initSearching('search');
-
-/* === СОЗДАНИЕ API ДЛЯ РАБОТЫ С ДАННЫМИ === */
-// Инициализация хранилища с исходными данными
-const API = initData(sourceData);
+// Инициализация API для работы с данными
+const api = initData(sourceData);
 
 /**
- * Сбор текущего состояния интерфейса таблицы
- * Извлекает параметры фильтрации, сортировки, пагинации и поиска
- * @returns {Object} Объект состояния с полями:
- *   - rowsPerPage: число - количество записей на странице
- *   - page: число - текущая страница (по умолчанию 1)
- *   - ...другие параметры из формы
+ * Собирает и обрабатывает состояние формы таблицы
+ * @returns {Object} Объект состояния с параметрами пагинации и фильтрации
  */
 function collectState() {
-    // Получение данных из элементов управления таблицей
+    // Получаем данные формы из DOM-элементов таблицы
     const state = processFormData(new FormData(sampleTable.container));
-    
-    // Преобразование строковых значений в числовые
+
+    // Преобразуем параметры пагинации в числовой формат
     const rowsPerPage = parseInt(state.rowsPerPage);
-    const page = parseInt(state.page ?? 1); // Значение по умолчанию для страницы
-    
-    // Получение текущего поискового запроса
-    const searchValue = document.querySelector('input[name="search"]').value;
-    
+    const page = parseInt(state.page ?? 1);
+
     return {
-        ...state, // Все параметры из формы
-        rowsPerPage, // Нормализованное количество строк
-        page // Нормализованный номер страницы
+        ...state,
+        rowsPerPage,
+        page,
     };
 }
 
 /**
- * Основная функция рендеринга таблицы
- * Вызывается при любых изменениях состояния
- * @param {HTMLButtonElement?} action - элемент, вызвавший обновление
+ * Основная функция рендеринга, обновляющая интерфейс при изменениях
+ * @param {HTMLButtonElement|null} action - Действие пользователя, вызвавшее обновление
  */
 async function render(action) {
-    // 1. Сбор текущего состояния интерфейса
+    // Собираем текущее состояние интерфейса
     let state = collectState();
-    
-    // 2. Формирование параметров запроса
     let query = {};
-    
-    // 3. Последовательное применение всех операций к запросу:
-    query = applyPagination(query, state, action); // Пагинация
-    query = applyFiltering(query, state, action);  // Фильтрация
-    query = applySearching(query, state, action);  // Поиск
-    query = applySorting(query, state, action);    // Сортировка
 
-    // 4. Получение данных с сервера/из хранилища
-    const { total, items } = await API.getRecords(query);
+    // Последовательно применяем все модули обработки запроса
+    query = applySearching(query, state, action);
+    query = applyFiltering(query, state, action);
+    query = applySorting(query, state, action);
+    query = applyPagination(query, state, action);
 
-    // 5. Обновление интерфейса
-    updatePagination(total, query); // Обновление пагинации
-    sampleTable.render(items);      // Перерисовка таблицы
+    // Получаем данные с сервера с примененными параметрами
+    const { total, items } = await api.getRecords(query);
+
+    // Обновляем элементы интерфейса
+    updatePagination(total, query);
+    sampleTable.render(items);
 }
 
-/* === ИНИЦИАЛИЗАЦИЯ ОСНОВНОЙ ТАБЛИЦЫ === */
-const sampleTable = initTable({
-    tableTemplate: 'table',  // ID шаблона таблицы
-    rowTemplate: 'row',      // ID шаблона строки
-    before: ['search', 'header', 'filter'], // Элементы перед таблицей
-    after: ['pagination']                   // Элементы после таблицы
-}, render);
+// Инициализация основной таблицы с компонентами
+const sampleTable = initTable(
+    {
+        tableTemplate: "table",
+        rowTemplate: "row",
+        before: ["search", "header", "filter"], // Компоненты перед таблицей
+        after: ["pagination"],                  // Компоненты после таблицы
+    },
+    render // Коллбэк для обработки действий
+);
 
-/* === НАСТРОЙКА ПАГИНАЦИИ === */
-const {applyPagination, updatePagination} = initPagination(
-    sampleTable.pagination.elements, // DOM-элементы пагинации
-    (el, page, isCurrent) => {      // Колбэк для рендеринга кнопки
-        const input = el.querySelector('input');
-        const label = el.querySelector('span');
+// Инициализация модуля пагинации
+const { applyPagination, updatePagination } = initPagination(
+    sampleTable.pagination.elements,
+    (el, page, isCurrent) => {
+        // Заполняем элементы кнопки пагинации данными
+        const input = el.querySelector("input");
+        const label = el.querySelector("span");
         input.value = page;
         input.checked = isCurrent;
         label.textContent = page;
@@ -102,52 +82,34 @@ const {applyPagination, updatePagination} = initPagination(
     }
 );
 
-/* === МОНТАЖ ИНТЕРФЕЙСА === */
-const appRoot = document.querySelector('#app');
-appRoot.appendChild(sampleTable.container);
-
-/* === НАСТРОЙКА ПОИСКА === */
-const searchInput = document.querySelector('input[name="search"]');
-const resetBtn = document.querySelector('button[data-name="reset"]');
-
-// Обработчик ввода в поисковую строку
-searchInput.addEventListener('input', () => {
-    render();
-});
-
-// Обработчик сброса поиска
-resetBtn.addEventListener('click', () => {
-    searchInput.value = '';
-    render();
-});
-
-/* === НАСТРОЙКА СОРТИРОВКИ === */
+// Инициализация модуля сортировки
 const applySorting = initSorting([
-    sampleTable.header.elements.sortByDate,   // Кнопка сортировки по дате
-    sampleTable.header.elements.sortByTotal   // Кнопка сортировки по сумме
+    sampleTable.header.elements.sortByDate,
+    sampleTable.header.elements.sortByTotal,
 ]);
 
-/* === НАСТРОЙКА ФИЛЬТРАЦИИ === */
-const {applyFiltering, updateIndexes} = initFiltering(sampleTable.filter.elements);
+// Инициализация модуля фильтрации
+const { applyFiltering, updateIndexes } = initFiltering(sampleTable.filter.elements);
+
+// Инициализация модуля поиска
+const applySearching = initSearching('search');
+
+// Размещение таблицы в DOM
+const appRoot = document.querySelector("#app");
+appRoot.appendChild(sampleTable.container);
 
 /**
- * Инициализация приложения
- * Загрузка индексов для фильтров и первичный рендеринг
+ * Инициализация приложения: загрузка справочных данных и первичный рендеринг
  */
-async function init() { 
-    const indexes = await API.getIndexes(); 
-    
-    // Обновление элементов фильтрации
+async function init() {
+    // Загружаем справочные данные (продавцы, покупатели)
+    const indexes = await api.getIndexes();
+
+    // Обновляем фильтры доступными значениями
     updateIndexes(sampleTable.filter.elements, {
-        searchBySeller: indexes.sellers // Список продавцов для фильтра
+        searchBySeller: indexes.sellers,
     });
-} 
+}
 
-// Запуск приложения
+// Запуск инициализации и первичного рендеринга
 init().then(render);
-
-/* === АРХИТЕКТУРНЫЕ ЗАМЕТКИ === */
-// 1. Все компоненты работают через единый цикл рендеринга
-// 2. Состояние управляется централизованно через collectState()
-// 3. Изменения интерфейса вызывают перерисовку через render()
-// 4. API предоставляет унифицированный доступ к данным

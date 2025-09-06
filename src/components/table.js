@@ -1,78 +1,84 @@
-// Импорт вспомогательной функции для клонирования шаблонов
-import {cloneTemplate} from "../lib/utils.js";
+import { cloneTemplate } from "../lib/utils.js";
 
 /**
- * Фабрика для создания интерактивной таблицы с обработкой действий
- * @param {Object} settings - Конфигурационные параметры таблицы
+ * Инициализирует таблицу данных с поддержкой обработки действий пользователя
+ * @param {Object} settings - Настройки для инициализации таблицы
  * @param {HTMLElement} settings.tableTemplate - Шаблон таблицы
  * @param {HTMLElement} settings.rowTemplate - Шаблон строки таблицы
- * @param {Array<string>} settings.before - Список шаблонов для вставки перед таблицей
- * @param {Array<string>} settings.after - Список шаблонов для вставки после таблицы
- * @param {(action: HTMLButtonElement|undefined) => void} onAction - Коллбэк при действиях с таблицей
+ * @param {Array<string>} settings.before - Список компонентов для размещения перед таблицей
+ * @param {Array<string>} settings.after - Список компонентов для размещения после таблицы
+ * @param {Function} onAction - Коллбэк-функция, вызываемая при действиях пользователя
  * @returns {Object} Объект с элементами таблицы и методом render
  */
 export function initTable(settings, onAction) {
-    // Деструктуризация настроек
-    const {tableTemplate, rowTemplate, before, after} = settings;
-    
-    // Создание корневого элемента таблицы
+    const { tableTemplate, rowTemplate, before, after } = settings;
+
+    // Создаем корневой элемент таблицы из шаблона
     const root = cloneTemplate(tableTemplate);
 
-    // Добавление дополнительных элементов перед таблицей
-    // Реверсируем порядок для правильной вставки через prepend
-    before.reverse().forEach(templateName => {
-        root[templateName] = cloneTemplate(templateName);
-        root.container.prepend(root[templateName].container);
-    });
-    
-    // Добавление дополнительных элементов после таблицы
-    after.forEach(templateName => {
-        root[templateName] = cloneTemplate(templateName);
-        root.container.append(root[templateName].container);
+    // Добавляем компоненты перед основной таблицей (в обратном порядке)
+    before.reverse().forEach((subName) => {
+        root[subName] = cloneTemplate(subName);
+        root.container.prepend(root[subName].container);
     });
 
-    // Обработка событий таблицы
-    root.container.addEventListener('change', () => {
-        // Вызов коллбэка при изменении данных
-        onAction();
+    // Добавляем компоненты после основной таблицы
+    after.forEach((subName) => {
+        root[subName] = cloneTemplate(subName);
+        root.container.append(root[subName].container);
     });
-    
-    root.container.addEventListener('reset', () => {
-        // Асинхронный вызов после сброса формы
-        setTimeout(onAction);
-    });
-    
+
+    // Обработчик изменений в элементах управления таблицы
+    root.container.addEventListener('change', onAction);
+
+    /**
+     * Обработчик сброса всех фильтров
+     * При нажатии "Reset all filters" происходит:
+     * - Сброс значений всех полей фильтрации
+     * - Вызов render после завершения сброса
+     * - Отправка запроса на сервер без параметров фильтрации
+     * - Загрузка полного набора данных
+     * - Обновление таблицы
+     */
+    root.container.addEventListener('reset', () => setTimeout(onAction, 0));
+
+    // Обработчик отправки форм (предотвращает стандартное поведение)
     root.container.addEventListener('submit', (e) => {
-        // Предотвращение стандартного поведения формы
         e.preventDefault();
-        // Передача элемента, инициировавшего отправку
         onAction(e.submitter);
     });
 
     /**
-     * Функция рендеринга данных в таблицу
+     * Обновляет содержимое таблицы новыми данными
      * @param {Array<Object>} data - Массив объектов с данными для отображения
      */
     const render = (data) => {
-        // Преобразование данных в DOM-элементы строк
-        const nextRows = data.map(item => {
-            // Клонирование шаблона строки
+        // Создаем новые строки таблицы из данных
+        const nextRows = data.map((item) => {
             const row = cloneTemplate(rowTemplate);
-        
-            // Заполнение строки данными
+
+            // Заполняем каждое поле строки соответствующими данными
             Object.keys(item).forEach(key => {
-                if (row.elements[key]) {
-                    row.elements[key].textContent = item[key];
+                if (key in row.elements) {
+                    const element = row.elements[key];
+
+                    // Для input и select элементов устанавливаем value
+                    if (['INPUT', 'SELECT'].includes(element.tagName)) {
+                        element.value = item[key];
+                    } else {
+                        // Для других элементов устанавливаем текстовое содержимое
+                        element.textContent = item[key];
+                    }
                 }
             });
-        
+
             return row.container;
         });
-        
-        // Замена содержимого контейнера строк
-        root.elements.rows.replaceChildren(...nextRows);
-    }
 
-    // Возвращаем объект с элементами таблицы и функцией рендеринга
+        // Заменяем текущие строки таблицы новыми
+        root.elements.rows.replaceChildren(...nextRows);
+    };
+
+    // Возвращаем публичный интерфейс с доступом к элементам и методу render
     return {...root, render};
 }
